@@ -1,68 +1,55 @@
 import streamlit as st
 import google.generativeai as genai
-from duckduckgo_search import DDGS
+from tavily import TavilyClient
 import os
 from dotenv import load_dotenv
 
-# 1. Load environment variables
 load_dotenv()
 
-# 2. Configure Page
 st.set_page_config(page_title="ExamPrep.AI", page_icon="🎓")
 
-# 3. Setup Gemini API
-api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    st.error("⚠️ API Key not found! Please check your .env file.")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+TAVILY_API_KEY = st.secrets.get("TAVILY_API_KEY") or os.getenv("TAVILY_API_KEY")
+
+if not GEMINI_API_KEY:
+    st.error("⚠️ GEMINI_API_KEY missing! Add it to .env or Streamlit Secrets.")
     st.stop()
 
-genai.configure(api_key=api_key)
+if not TAVILY_API_KEY:
+    st.error("⚠️ TAVILY_API_KEY missing! Add it to .env or Streamlit Secrets.")
+    st.stop()
 
-# --- HARDCODED MODEL SELECTION ---
-# We selected this specific model from your available list.
-# It is fast, smart, and free-tier friendly.
-MODEL_ID = "models/gemini-2.0-flash"
+genai.configure(api_key=GEMINI_API_KEY)
+tavily = TavilyClient(api_key=TAVILY_API_KEY)
+
+MODEL_ID = "gemini-1.5-flash"
 
 
-# 4. Define the Tool
 def search_web(query):
     """
-    Searches the web for the latest information on a topic.
+    Searches the web for accurate information using Tavily (AI-Optimized Search).
     """
     try:
-        results = DDGS().text(query, max_results=3)
-        if results:
-            return "\n".join(
-                [f"Title: {r['title']}\nSnippet: {r['body']}" for r in results]
-            )
-        return "No specific results found on the web."
+        response = tavily.qna_search(query=query)
+        return response
     except Exception as e:
         return f"Search error: {str(e)}"
 
 
-# 5. Initialize Model
 tools_list = [search_web]
+model = genai.GenerativeModel(MODEL_ID, tools=tools_list)
 
-try:
-    model = genai.GenerativeModel(MODEL_ID, tools=tools_list)
-except Exception as e:
-    st.error(f"Error loading model: {e}")
-    st.stop()
-
-# 6. Session State
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# --- UI LAYOUT ---
 st.title("🎓 ExamPrep Concierge")
-st.caption(f"🤖 Powered by: `{MODEL_ID}`")
+st.caption("🤖 Powered by Gemini 1.5 Flash & Tavily Search")
 
 if st.sidebar.button("Clear Chat Memory"):
     st.session_state.chat_history = []
     st.rerun()
 
-# 7. Main Logic
-user_input = st.chat_input("Enter a topic (e.g., 'Operating Systems Deadlocks')...")
+user_input = st.chat_input("Enter a topic (e.g., 'React Hooks')...")
 
 if user_input:
     st.chat_message("user").markdown(user_input)
@@ -92,5 +79,3 @@ if user_input:
 
         except Exception as e:
             st.error(f"An error occurred: {e}")
-            if "429" in str(e):
-                st.warning("⚠️ High traffic. Please wait 1 minute and try again.")
