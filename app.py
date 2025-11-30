@@ -46,6 +46,7 @@ def search_web(query):
     """
     try:
         response = tavily.qna_search(query=query)
+        st.write("🔍 RAW TAVILY OUTPUT:", response)
         return response
     except Exception as e:
         error_msg = f"Search Tool Failed: {str(e)}"
