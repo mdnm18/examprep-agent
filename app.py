@@ -27,11 +27,11 @@ GEMINI_API_KEY = get_key("GEMINI_API_KEY")
 TAVILY_API_KEY = get_key("TAVILY_API_KEY")
 
 if not GEMINI_API_KEY:
-    st.error("⚠️ GEMINI_API_KEY missing! Check your Streamlit Secrets.")
+    st.error("⚠️ GEMINI_API_KEY missing! Check your .env or Streamlit Secrets.")
     st.stop()
 
 if not TAVILY_API_KEY:
-    st.error("⚠️ TAVILY_API_KEY missing! Check your Streamlit Secrets.")
+    st.error("⚠️ TAVILY_API_KEY missing! Check your .env or Streamlit Secrets.")
     st.stop()
 
 genai.configure(api_key=GEMINI_API_KEY)
@@ -42,20 +42,22 @@ MODEL_ID = "gemini-2.0-flash"
 
 def search_web(query):
     """
-    Searches the web using Tavily. Includes Error Logging.
+    Searches the web for accurate information using Tavily.
+    Returns raw JSON context to be processed by the LLM.
     """
     try:
-        response = tavily.qna_search(query=query)
-        st.write("🔍 RAW TAVILY OUTPUT:", response)
-        return response
+
+        response = tavily.search(query=query, search_depth="basic", max_results=5)
+        return str(response)
     except Exception as e:
-        error_msg = f"Search Tool Failed: {str(e)}"
-        st.error(error_msg)
-        return error_msg
+        return f"Search error: {str(e)}"
 
 
-tools_list = [search_web]
-model = genai.GenerativeModel(MODEL_ID, tools=tools_list)
+try:
+    model = genai.GenerativeModel(MODEL_ID)
+except Exception as e:
+    st.error(f"Error loading model: {e}")
+    st.stop()
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -72,27 +74,31 @@ user_input = st.chat_input("Enter a topic (e.g., 'React Hooks')...")
 if user_input:
     st.chat_message("user").markdown(user_input)
 
-    chat = model.start_chat(
-        history=st.session_state.chat_history, enable_automatic_function_calling=True
-    )
+    with st.spinner("🕵️ Researcher Agent is finding study materials..."):
+        search_context = search_web(user_input)
 
     prompt = f"""
-    You are an advanced AI Study Assistant.
+    You are an expert AI Tutor. Your goal is to teach the user about: "{user_input}".
     
-    STEP 1 (RESEARCHER): 
-    The user is asking about: "{user_input}".
-    Use the 'search_web' tool to find the absolute latest academic definitions and examples for this.
+    I have performed a real-time web search for you. Here is the raw research data:
+    {search_context}
     
-    STEP 2 (TUTOR):
-    Based *only* on the search results:
-    1. Explain the concept briefly (2-3 sentences).
-    2. Ask the user ONE conceptual multiple-choice question to test their understanding.
+    INSTRUCTIONS:
+    1. Read the research data above.
+    2. Explain the concept "{user_input}" clearly and concisely (approx 3 sentences).
+    3. Generate ONE conceptual multiple-choice question to test the user's understanding.
+    4. Provide the correct answer and a brief explanation in a spoiler tag or at the end.
+    
+    If the research data is empty, rely on your internal knowledge but mention that live data was unavailable.
     """
 
-    with st.spinner("Researching definitions and preparing a quiz..."):
+    with st.spinner("👨‍🏫 Tutor Agent is generating your lesson..."):
         try:
+            chat = model.start_chat(history=st.session_state.chat_history)
             response = chat.send_message(prompt)
+
             st.chat_message("assistant").markdown(response.text)
+
             st.session_state.chat_history = chat.history
 
         except Exception as e:
