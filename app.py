@@ -8,46 +8,49 @@ load_dotenv()
 
 st.set_page_config(page_title="ExamPrep.AI", page_icon="🎓")
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+
+def get_key(name):
+    try:
+        val = st.secrets.get(name)
+    except:
+        val = None
+
+    if not val:
+        val = os.getenv(name)
+
+    if val:
+        return val.strip()
+    return None
+
+
+GEMINI_API_KEY = get_key("GEMINI_API_KEY")
+TAVILY_API_KEY = get_key("TAVILY_API_KEY")
 
 if not GEMINI_API_KEY:
-    try:
-        GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-    except:
-        pass
-
-if not TAVILY_API_KEY:
-    try:
-        TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
-    except:
-        pass
-
-if not GEMINI_API_KEY:
-    st.error("⚠️ GEMINI_API_KEY missing! Add it to .env or Streamlit Secrets.")
+    st.error("⚠️ GEMINI_API_KEY missing! Check your Streamlit Secrets.")
     st.stop()
 
 if not TAVILY_API_KEY:
-    st.error("⚠️ TAVILY_API_KEY missing! Add it to .env or Streamlit Secrets.")
+    st.error("⚠️ TAVILY_API_KEY missing! Check your Streamlit Secrets.")
     st.stop()
 
 genai.configure(api_key=GEMINI_API_KEY)
 tavily = TavilyClient(api_key=TAVILY_API_KEY)
-
 
 MODEL_ID = "gemini-2.0-flash"
 
 
 def search_web(query):
     """
-    Searches the web for accurate information using Tavily (AI-Optimized Search).
+    Searches the web using Tavily. Includes Error Logging.
     """
     try:
-        # qna_search gives a direct answer optimized for agents
         response = tavily.qna_search(query=query)
         return response
     except Exception as e:
-        return f"Search error: {str(e)}"
+        error_msg = f"Search Tool Failed: {str(e)}"
+        st.error(error_msg)
+        return error_msg
 
 
 tools_list = [search_web]
@@ -57,7 +60,7 @@ if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
 st.title("🎓 ExamPrep Concierge")
-st.caption("🤖 Powered by Gemini 2.0 Flash & Tavily Search")
+st.caption(f"🤖 Powered by {MODEL_ID} & Tavily Search")
 
 if st.sidebar.button("Clear Chat Memory"):
     st.session_state.chat_history = []
